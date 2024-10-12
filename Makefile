@@ -1,74 +1,29 @@
-APP_NAME = ex1
-BUILD_DIR = ./bin
-APP_DIR = $(BUILD_DIR)/$(APP_NAME).app/Contents/MacOS
+# Compiler and Flags
+CC := clang
+CFLAGS := -std=c17 -O3 -march=native
+FRAMEWORKS := -framework Cocoa -framework Metal -framework MetalKit -framework QuartzCore -framework ModelIO
+INCLUDES := -I./include
 
-LIB_NAME = mkl
-LIB_DEFINES = -fvisibility=hidden -fPIC -O2 -Wno-nullability-completeness
-LIB_INCLUDES = -I./MKL/src
-LIB_LINKERS = -dynamiclib -install_name @rpath/lib$(LIB_NAME).dylib -framework Cocoa -framework Metal -framework MetalKit -framework QuartzCore -framework ModelIO
+# Directories and Sources
+SRC_DIR := src
+BUILD_DIR := build
+SRC := $(wildcard $(SRC_DIR)/*.{c,m})
 
-LIB_C_FILES = $(shell find ./MKL/src -name "*.c")
-LIB_OBJC_FILES = $(shell find ./MKL/src -name "*.m")
-LIB_O_FILES = $(patsubst ./MKL/src/%.c, $(BUILD_DIR)/%.o, $(LIB_C_FILES)) $(patsubst ./MKL/src/%.m, $(BUILD_DIR)/%.o, $(LIB_OBJC_FILES))
-
-APP_DEFINES = -O2 -Wno-nullability-completeness
-APP_INCLUDES = -I./App/ -I./MKL/src
-APP_LINKERS = -L$(BUILD_DIR) -lmkl -framework Cocoa -framework Metal -framework MetalKit -framework QuartzCore -framework ModelIO
-
-APP_C_FILES = ./App/main.c
-APP_O_FILES = $(patsubst ./App/%.c, $(BUILD_DIR)/%.o, $(APP_C_FILES))
-
-ENTITLEMENTS_PLIST = $(BUILD_DIR)/entitlements.plist
-
-all: buildLib buildApp codesign
-
-buildLib: $(LIB_O_FILES)
-	@echo "Building Library..."
+all:
 	mkdir -p $(BUILD_DIR)
-	clang $(LIB_DEFINES) $(LIB_INCLUDES) $(LIB_LINKERS) $^ -o $(BUILD_DIR)/lib$(LIB_NAME).dylib
-	@echo "Successfully built library!"
+	mkdir -p $(BUILD_DIR)/example
 
-buildApp: $(APP_O_FILES)
-	@echo "Building App..."
-	mkdir -p $(APP_DIR) $(APP_DIR)/../Resources
-	clang $(APP_DEFINES) $(APP_INCLUDES) $(APP_LINKERS) $^ -o $(APP_DIR)/$(APP_NAME)
-	install_name_tool -add_rpath @executable_path/ $(APP_DIR)/$(APP_NAME)
-	cp $(BUILD_DIR)/lib$(LIB_NAME).dylib $(APP_DIR)/
-	cp ./MKL/src/Graphics/Shaders/* $(APP_DIR)/../Resources/
-	@echo "Successfully built app!"
+EXAMPLE_SRC := $(wildcard example/*.c)
+# build example: takes an example name as an argument and builds it
+build_example
+	$(CC) $(CFLAGS) $(INCLUDES) $(FRAMEWORKS) $(EXAMPLE_SRC) $(SRC) -o $(BUILD_DIR)/example
 
-$(ENTITLEMENTS_PLIST):
-	@echo "Creating entitlements plist..."
-	@echo '<?xml version="1.0" encoding="UTF-8"?>' > $(ENTITLEMENTS_PLIST)
-	@echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> $(ENTITLEMENTS_PLIST)
-	@echo '<plist version="1.0">' >> $(ENTITLEMENTS_PLIST)
-	@echo '    <dict>' >> $(ENTITLEMENTS_PLIST)
-	@echo '        <key>com.apple.security.get-task-allow</key>' >> $(ENTITLEMENTS_PLIST)
-	@echo '        <true/>' >> $(ENTITLEMENTS_PLIST)
-	@echo '    </dict>' >> $(ENTITLEMENTS_PLIST)
-	@echo '</plist>' >> $(ENTITLEMENTS_PLIST)
+run_example: $(BUILD_DIR)/example
+	$(BUILD_DIR)/example
 
-codesign: $(ENTITLEMENTS_PLIST)
-	@echo "Code signing..."
-	codesign -s - -v -f --entitlements $(ENTITLEMENTS_PLIST) $(APP_DIR)/$(APP_NAME)
-
-run:
-	@echo "Running App..."
-	./$(APP_DIR)/$(APP_NAME)
-
+# Clean build artifacts
 clean:
-	@echo "Cleaning up..."
-	rm -f $(LIB_O_FILES) $(APP_O_FILES)
-	rm -f $(APP_DIR)/$(APP_NAME) $(BUILD_DIR)/lib$(LIB_NAME).dylib
+	rm -rf $(BUILD_DIR)
 
-$(BUILD_DIR)/%.o: ./MKL/src/%.c
-	mkdir -p $(dir $@)
-	clang -c $(LIB_DEFINES) $(LIB_INCLUDES) $< -o $@
-
-$(BUILD_DIR)/%.o: ./MKL/src/%.m
-	mkdir -p $(dir $@)
-	clang -c $(LIB_DEFINES) $(LIB_INCLUDES) $< -o $@
-
-$(BUILD_DIR)/%.o: ./App/%.c
-	mkdir -p $(dir $@)
-	clang -c $(APP_DEFINES) $(APP_INCLUDES) $< -o $@
+# Declare phony targets
+.PHONY: all clean
